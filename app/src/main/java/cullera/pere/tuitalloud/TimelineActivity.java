@@ -1,15 +1,21 @@
 package cullera.pere.tuitalloud;
 
+import android.app.DialogFragment;
 import android.app.ListActivity;
 import android.content.Context;
 import android.content.Intent;
 import android.os.Bundle;
+import android.speech.tts.TextToSpeech;
+import android.support.v4.widget.SwipeRefreshLayout;
+import android.util.Log;
 import android.view.Menu;
 import android.view.MenuInflater;
+import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.Toast;
 
+import com.twitter.sdk.android.Twitter;
 import com.twitter.sdk.android.core.Callback;
 import com.twitter.sdk.android.core.Result;
 import com.twitter.sdk.android.core.TwitterApiClient;
@@ -19,20 +25,27 @@ import com.twitter.sdk.android.core.TwitterException;
 import com.twitter.sdk.android.core.models.Tweet;
 import com.twitter.sdk.android.tweetui.FixedTweetTimeline;
 import com.twitter.sdk.android.tweetui.Timeline;
+import com.twitter.sdk.android.tweetui.TimelineResult;
 import com.twitter.sdk.android.tweetui.TweetTimelineListAdapter;
-import com.twitter.sdk.android.tweetui.TweetUi;
 
 import java.util.List;
+import java.util.Locale;
 
 import io.fabric.sdk.android.Fabric;
 
-public class TimelineActivity extends ListActivity {
+public class TimelineActivity extends ListActivity implements TextToSpeech.OnInitListener {
 
     // Note: Your consumer key and secret should be obfuscated in your source code before shipping.
     private static final String TWITTER_KEY = "d9A58jFxpQURROph3St6g";
     private static final String TWITTER_SECRET = "tEaAKgazoS6ADKOFUSnHYPKRAXKiBSGAPnO2FS2szE";
 
     public static Context c;
+
+    CustomTweetTimelineListAdapter adapter;
+    static List<Tweet> tweets;
+    private TextToSpeech engine;
+
+    Utilities ut = new Utilities();
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -42,28 +55,66 @@ public class TimelineActivity extends ListActivity {
 
         setContentView(R.layout.activity_timeline);
 
-        TwitterAuthConfig authConfig = new TwitterAuthConfig(TWITTER_KEY, TWITTER_SECRET);
-        Fabric.with(this, new TwitterCore(authConfig), new TweetUi());
 
+        engine = new TextToSpeech(this, this);
+
+
+
+        TwitterAuthConfig authConfig = new TwitterAuthConfig(TWITTER_KEY, TWITTER_SECRET);
+
+        final Fabric fabric = new Fabric.Builder(this)
+                .kits(new Twitter(authConfig))
+                .debuggable(true) // <----- set to true to see more logs
+                .build();
+        Fabric.with(fabric);
+        //Fabric.with(this, new TwitterCore(authConfig), new TweetUi());
+
+        getTweets();
+
+        final SwipeRefreshLayout swipeLayout = (SwipeRefreshLayout) findViewById(R.id.swipeRefreshLayout);
+
+        swipeLayout.setOnRefreshListener(new SwipeRefreshLayout.OnRefreshListener() {
+            @Override
+            public void onRefresh() {
+                swipeLayout.setRefreshing(true);
+                adapter.refresh(new Callback<TimelineResult<Tweet>>() {
+                    @Override
+                    public void success(Result<TimelineResult<Tweet>> result) {
+                        swipeLayout.setRefreshing(false);
+                        getTweets();
+                    }
+
+                    @Override
+                    public void failure(TwitterException exception) {
+                        // Toast or some other action
+                    }
+                });
+            }
+        });
+
+    }
+
+    public void getTweets(){
         TwitterApiClient twitterApiClient = TwitterCore.getInstance().getApiClient();
         twitterApiClient.getStatusesService().homeTimeline(null, null, null, null,null,null, null, new Callback <List<Tweet>>() {
 
             @Override
             public void success(Result<List<Tweet>> listResult) {
-                final List<Tweet> tweets = listResult.data;
+                tweets = listResult.data;
                 final FixedTweetTimeline userTimeline = new FixedTweetTimeline.Builder()
                         .setTweets(tweets)
                         .build();
-                final CustomTweetTimelineListAdapter adapter = new CustomTweetTimelineListAdapter(TimelineActivity.this, userTimeline);
+                adapter = new CustomTweetTimelineListAdapter(TimelineActivity.this, userTimeline);
                 setListAdapter(adapter);
             }
 
             @Override
             public void failure(TwitterException e) {
-
+                Log.d("Twitter","twitter " + e );
             }
         });
     }
+
     public static void showTweetActivity(long tweetId){
         Intent intent = new Intent(c ,TweetActivity.class);
         intent.putExtra("tweetID",tweetId);
@@ -76,6 +127,96 @@ public class TimelineActivity extends ListActivity {
         MenuInflater inflater = getMenuInflater();
         inflater.inflate(R.menu.menu_timeline, menu);
         return super.onCreateOptionsMenu(menu);
+    }
+    @Override
+    public boolean onOptionsItemSelected(MenuItem item) {
+        // Handle action bar item clicks here. The action bar will
+        // automatically handle clicks on the Home/Up button, so long
+        // as you specify a parent activity in AndroidManifest.xml.
+        int id = item.getItemId();
+
+        //noinspection SimplifiableIfStatement
+        switch (id) {
+            case R.id.action_settings:
+
+
+            case R.id.action_read:
+                speech();
+
+        }
+
+        return super.onOptionsItemSelected(item);
+    }
+
+    @Override
+    public void onInit(int status) {
+        if (status == TextToSpeech.SUCCESS) {
+            //Log.d('Speech', 'Success!');
+            Locale spanish = new Locale("es", "ES");
+            engine.setLanguage(spanish);
+        }
+
+    }
+    private void speech() {
+
+        engine.speak("Hola Mundo", TextToSpeech.QUEUE_FLUSH, null);
+
+        Tweet tweet;
+        //getTweets();
+
+        new SpeakingDialogFragment();
+        showDialog();
+
+       /* AlertDialog show = new AlertDialog.Builder(c)
+                .setTitle("Speaking")
+                .setMessage("Stop speaking?")
+                .setPositiveButton(android.R.string.yes, new DialogInterface.OnClickListener() {
+                    public void onClick(DialogInterface dialog, int which) {
+                        // continue with delete
+                        //para();
+
+                    }
+                })
+                .setNegativeButton(android.R.string.no, new DialogInterface.OnClickListener() {
+                    public void onClick(DialogInterface dialog, int which) {
+                        // do nothing
+                    }
+                })
+                .setIcon(android.R.drawable.ic_dialog_alert)
+                .show();*/
+        for (int i = 0; i< TimelineActivity.tweets.size(); i++){
+            tweet = TimelineActivity.tweets.get(i);
+
+
+            engine.speak("Usuario"+ tweet.user.name + "dice", TextToSpeech.QUEUE_ADD, null);
+            String processedTw = ut.processTuit(tweet);
+            engine.speak(processedTw, TextToSpeech.QUEUE_ADD, null);
+            while(engine.isSpeaking()) {
+                Log.d("Speaking","Speaking");
+            }
+        }
+
+    }
+    public void stopSpeech(){
+        if(engine !=null){
+            engine.stop();
+            engine.shutdown();
+        }
+    }
+    void showDialog() {
+        DialogFragment newFragment = SpeakingDialogFragment.newInstance(
+                1);
+        newFragment.show(getFragmentManager(), "dialog");
+    }
+
+    public void doPositiveClick() {
+        // Do stuff here.
+        Log.i("FragmentAlertDialog", "Positive click!");
+    }
+
+    public void doNegativeClick() {
+        // Do stuff here.
+        Log.i("FragmentAlertDialog", "Negative click!");
     }
 }
 

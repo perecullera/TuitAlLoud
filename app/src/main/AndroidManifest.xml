@@ -25,7 +25,8 @@
 
         <activity
             android:name=".TimelineActivity"
-            android:label="@string/title_activity_timeline" >
+            android:label="@string/title_activity_timeline"
+            android:theme="@android:style/Theme.Holo.Light.DarkActionBar">
         </activity>
         <activity
             android:name=".TweetActivity"
